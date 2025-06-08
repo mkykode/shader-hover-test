@@ -1,7 +1,7 @@
-import React, { useRef, useEffect, useMemo, useState } from 'react';
-import { useFrame, useLoader, useThree } from '@react-three/fiber';
-import { TextureLoader, Vector2, Mesh, ShaderMaterial } from 'three';
-import { gsap } from 'gsap';
+import React, { useRef, useEffect, useMemo, useState } from "react";
+import { useFrame, useLoader, useThree } from "@react-three/fiber";
+import { TextureLoader, Vector2, Mesh, ShaderMaterial } from "three";
+import { gsap } from "gsap";
 
 // Inline shaders
 const vertexShader = `
@@ -10,11 +10,11 @@ varying vec3 vWorldPosition;
 
 void main() {
     vUv = uv;
-    
+
     // Calculate world position for mouse interaction
     vec4 worldPosition = modelMatrix * vec4(position, 1.0);
     vWorldPosition = worldPosition.xyz;
-    
+
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
@@ -24,6 +24,7 @@ uniform float uTime;
 uniform vec2 uMouse;
 uniform vec2 uRes;
 uniform float uHover;
+uniform float uGlobalHover;
 uniform float uColorNum;
 uniform sampler2D uTexture;
 
@@ -45,16 +46,16 @@ const float bayerMatrix8x8[64] = float[64](
 // Function to apply ordered dithering
 vec3 orderedDither(vec2 uv, vec3 color) {
     float threshold = 0.0;
-    
+
     int x = int(uv.x * uRes.x) % 8;
     int y = int(uv.y * uRes.y) % 8;
     threshold = bayerMatrix8x8[y * 8 + x] - 0.88;
-    
+
     color.rgb += threshold;
     color.r = floor(color.r * (uColorNum - 1.0) + 0.5) / (uColorNum - 1.0);
     color.g = floor(color.g * (uColorNum - 1.0) + 0.5) / (uColorNum - 1.0);
     color.b = floor(color.b * (uColorNum - 1.0) + 0.5) / (uColorNum - 1.0);
-    
+
     return color;
 }
 
@@ -67,57 +68,65 @@ float getLuminance(vec3 color) {
 vec2 getDistortedUV(vec2 uv, vec2 mousePos, float intensity) {
     vec2 delta = uv - mousePos;
     float distance = length(delta);
-    
-    // Create a smooth falloff for the mouse influence - larger radius
-    float influence = 1.0 - smoothstep(0.0, 0.6, distance);
+
+    // Create a smooth falloff for the mouse influence
+    float influence = 1.0 - smoothstep(0.0, 0.4, distance);
     influence = pow(influence, 1.5);
-    
-    // Create stronger ripple effect with multiple waves
+
+    // Create ripple effects from mouse position
     float ripple1 = sin(distance * 15.0 - uTime * 5.0) * 0.03;
     float ripple2 = sin(distance * 8.0 - uTime * 2.0) * 0.02;
-    float ripple = ripple1 + ripple2;
-    
-    // Push pixels away from mouse - displacement effect
-    vec2 pushAway = normalize(delta) * (1.0 - distance) * 0.08 * intensity;
-    
-    // Apply stronger distortion
-    vec2 distortion = (normalize(delta) * ripple + pushAway) * influence * intensity;
-    
+    float ripple = (ripple1 + ripple2);
+
+    // Push pixels away from mouse position
+    vec2 pushDirection = normalize(delta);
+    float pushStrength = (1.0 - distance) * 0.08;
+    vec2 pushAway = pushDirection * pushStrength * intensity;
+
+    // Apply distortion
+    vec2 distortion = (pushDirection * ripple + pushAway) * influence * intensity;
+
     return uv + distortion;
 }
 
 void main() {
     // Convert mouse position to UV coordinates
     vec2 mouseUV = uMouse / uRes;
-    
+
     // Get distorted UV coordinates based on mouse interaction
     vec2 distortedUV = getDistortedUV(vUv, mouseUV, uHover);
-    
+
     // Sample the original texture
     vec4 originalColor = texture2D(uTexture, distortedUV);
-    
-    // Calculate distance from mouse for halo effect - larger area
+
+    // Calculate distance from mouse for halo effect
     float mouseDistance = length(vUv - mouseUV);
-    float haloInfluence = 1.0 - smoothstep(0.0, 0.7, mouseDistance);
+    float haloInfluence = 1.0 - smoothstep(0.0, 0.4, mouseDistance);
     haloInfluence = pow(haloInfluence, 1.2);
-    
-    // Calculate overall effect intensity - much stronger
-    float effectIntensity = uHover * (0.5 + 1.5 * haloInfluence);
-    
+
+    // Calculate overall effect intensity - stronger around mouse
+    float effectIntensity = uHover * (0.3 + 2.0 * haloInfluence);
+
     // Convert to grayscale for black and white dithering
     float luminance = getLuminance(originalColor.rgb);
     vec3 grayscaleColor = vec3(luminance);
-    
+
     // Apply dithering to grayscale
     vec3 ditheredColor = orderedDither(vUv, grayscaleColor);
-    
-    // Blend between original color and dithered black/white based on effect intensity
-    vec3 finalColor = mix(originalColor.rgb, ditheredColor, effectIntensity);
-    
-    // Add stronger glow effect near mouse
-    float glow = haloInfluence * uHover * 0.3;
-    finalColor += vec3(glow);
-    
+
+    // Global black and white effect for entire image
+    vec3 globalDithered = orderedDither(vUv, grayscaleColor);
+
+    // Blend between original and global B&W based on global hover
+    vec3 globalBlended = mix(originalColor.rgb, globalDithered, uGlobalHover);
+
+    // Local effect around cursor
+    vec3 localEffect = mix(globalBlended, ditheredColor, effectIntensity);
+
+    // Add glow effect around mouse
+    float glow = haloInfluence * uHover * 0.4;
+    vec3 finalColor = localEffect + vec3(glow);
+
     gl_FragColor = vec4(finalColor, originalColor.a);
 }
 `;
@@ -129,7 +138,7 @@ interface DitheredImageProps {
   colorQuantization?: number;
 }
 
-export const DitheredImage: React.FC<DitheredImageProps> = ({
+const DitheredImage: React.FC<DitheredImageProps> = ({
   src,
   width = 4.85,
   height = 4.85,
@@ -138,8 +147,9 @@ export const DitheredImage: React.FC<DitheredImageProps> = ({
   const meshRef = useRef<Mesh>(null);
   const materialRef = useRef<ShaderMaterial>(null);
   const hoverRef = useRef(0);
+  const globalHoverRef = useRef(0);
   const [isHovering, setIsHovering] = useState(false);
-  
+
   // Get Three.js context for mouse coordinates
   const { mouse } = useThree();
 
@@ -153,10 +163,11 @@ export const DitheredImage: React.FC<DitheredImageProps> = ({
       uMouse: { value: new Vector2(0, 0) },
       uRes: { value: new Vector2(512, 512) },
       uHover: { value: 0 },
+      uGlobalHover: { value: 0 },
       uColorNum: { value: colorQuantization },
       uTexture: { value: texture },
     }),
-    [texture, colorQuantization]
+    [texture, colorQuantization],
   );
 
   // Update uniforms on each frame
@@ -164,14 +175,15 @@ export const DitheredImage: React.FC<DitheredImageProps> = ({
     if (materialRef.current) {
       // Update time
       materialRef.current.uniforms.uTime.value = state.clock.elapsedTime;
-      
+
       // Convert mouse position to UV coordinates (0-1 range)
       const mouseX = (mouse.x + 1) * 0.5;
       const mouseY = (mouse.y + 1) * 0.5;
       materialRef.current.uniforms.uMouse.value.set(mouseX * 512, mouseY * 512);
-      
+
       // Update hover intensity from GSAP animation
       materialRef.current.uniforms.uHover.value = hoverRef.current;
+      materialRef.current.uniforms.uGlobalHover.value = globalHoverRef.current;
     }
   });
 
@@ -181,13 +193,25 @@ export const DitheredImage: React.FC<DitheredImageProps> = ({
       gsap.to(hoverRef, {
         current: 1,
         duration: 0.3,
-        ease: 'power2.out',
+        ease: "power2.out",
+      });
+      // Global effect builds up over time
+      gsap.to(globalHoverRef, {
+        current: 1,
+        duration: 2.0,
+        ease: "power2.inOut",
       });
     } else {
       gsap.to(hoverRef, {
         current: 0,
         duration: 0.3,
-        ease: 'power2.out',
+        ease: "power2.out",
+      });
+      // Global effect fades out faster
+      gsap.to(globalHoverRef, {
+        current: 0,
+        duration: 0.8,
+        ease: "power2.out",
       });
     }
   }, [isHovering]);
@@ -202,8 +226,8 @@ export const DitheredImage: React.FC<DitheredImageProps> = ({
   };
 
   return (
-    <mesh 
-      ref={meshRef} 
+    <mesh
+      ref={meshRef}
       scale={[width, height, 1]}
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
@@ -219,3 +243,5 @@ export const DitheredImage: React.FC<DitheredImageProps> = ({
     </mesh>
   );
 };
+
+export { DitheredImage };
