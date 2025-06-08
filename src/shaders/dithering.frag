@@ -23,16 +23,16 @@ const float bayerMatrix8x8[64] = float[64](
 // Function to apply ordered dithering
 vec3 orderedDither(vec2 uv, vec3 color) {
     float threshold = 0.0;
-    
+
     int x = int(uv.x * uRes.x) % 8;
     int y = int(uv.y * uRes.y) % 8;
     threshold = bayerMatrix8x8[y * 8 + x] - 0.88;
-    
+
     color.rgb += threshold;
     color.r = floor(color.r * (uColorNum - 1.0) + 0.5) / (uColorNum - 1.0);
     color.g = floor(color.g * (uColorNum - 1.0) + 0.5) / (uColorNum - 1.0);
     color.b = floor(color.b * (uColorNum - 1.0) + 0.5) / (uColorNum - 1.0);
-    
+
     return color;
 }
 
@@ -45,51 +45,51 @@ float getLuminance(vec3 color) {
 vec2 getDistortedUV(vec2 uv, vec2 mousePos, float intensity) {
     vec2 delta = uv - mousePos;
     float distance = length(delta);
-    
+
     // Create a smooth falloff for the mouse influence
     float influence = 1.0 - smoothstep(0.0, 0.3, distance);
     influence = pow(influence, 2.0);
-    
+
     // Create ripple effect
     float ripple = sin(distance * 20.0 - uTime * 3.0) * 0.01;
-    
+
     // Apply distortion
     vec2 distortion = normalize(delta) * ripple * influence * intensity;
-    
+
     return uv + distortion;
 }
 
 void main() {
     // Convert mouse position to UV coordinates
     vec2 mouseUV = uMouse / uRes;
-    
+
     // Get distorted UV coordinates based on mouse interaction
     vec2 distortedUV = getDistortedUV(vUv, mouseUV, uHover);
-    
+
     // Sample the original texture
     vec4 originalColor = texture2D(uTexture, distortedUV);
-    
+
     // Calculate distance from mouse for halo effect
     float mouseDistance = length(vUv - mouseUV);
     float haloInfluence = 1.0 - smoothstep(0.0, 0.4, mouseDistance);
     haloInfluence = pow(haloInfluence, 1.5);
-    
+
     // Calculate overall effect intensity
     float effectIntensity = uHover * (0.3 + 0.7 * haloInfluence);
-    
+
     // Convert to grayscale for black and white dithering
     float luminance = getLuminance(originalColor.rgb);
     vec3 grayscaleColor = vec3(luminance);
-    
+
     // Apply dithering to grayscale
     vec3 ditheredColor = orderedDither(vUv, grayscaleColor);
-    
+
     // Blend between original color and dithered black/white based on effect intensity
     vec3 finalColor = mix(originalColor.rgb, ditheredColor, effectIntensity);
-    
+
     // Add subtle glow effect near mouse
     float glow = haloInfluence * uHover * 0.1;
     finalColor += vec3(glow);
-    
+
     gl_FragColor = vec4(finalColor, originalColor.a);
 }
