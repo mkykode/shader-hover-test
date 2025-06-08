@@ -68,15 +68,20 @@ vec2 getDistortedUV(vec2 uv, vec2 mousePos, float intensity) {
     vec2 delta = uv - mousePos;
     float distance = length(delta);
     
-    // Create a smooth falloff for the mouse influence
-    float influence = 1.0 - smoothstep(0.0, 0.3, distance);
-    influence = pow(influence, 2.0);
+    // Create a smooth falloff for the mouse influence - larger radius
+    float influence = 1.0 - smoothstep(0.0, 0.6, distance);
+    influence = pow(influence, 1.5);
     
-    // Create ripple effect
-    float ripple = sin(distance * 20.0 - uTime * 3.0) * 0.01;
+    // Create stronger ripple effect with multiple waves
+    float ripple1 = sin(distance * 15.0 - uTime * 5.0) * 0.03;
+    float ripple2 = sin(distance * 8.0 - uTime * 2.0) * 0.02;
+    float ripple = ripple1 + ripple2;
     
-    // Apply distortion
-    vec2 distortion = normalize(delta) * ripple * influence * intensity;
+    // Push pixels away from mouse - displacement effect
+    vec2 pushAway = normalize(delta) * (1.0 - distance) * 0.08 * intensity;
+    
+    // Apply stronger distortion
+    vec2 distortion = (normalize(delta) * ripple + pushAway) * influence * intensity;
     
     return uv + distortion;
 }
@@ -91,13 +96,13 @@ void main() {
     // Sample the original texture
     vec4 originalColor = texture2D(uTexture, distortedUV);
     
-    // Calculate distance from mouse for halo effect
+    // Calculate distance from mouse for halo effect - larger area
     float mouseDistance = length(vUv - mouseUV);
-    float haloInfluence = 1.0 - smoothstep(0.0, 0.4, mouseDistance);
-    haloInfluence = pow(haloInfluence, 1.5);
+    float haloInfluence = 1.0 - smoothstep(0.0, 0.7, mouseDistance);
+    haloInfluence = pow(haloInfluence, 1.2);
     
-    // Calculate overall effect intensity
-    float effectIntensity = uHover * (0.3 + 0.7 * haloInfluence);
+    // Calculate overall effect intensity - much stronger
+    float effectIntensity = uHover * (0.5 + 1.5 * haloInfluence);
     
     // Convert to grayscale for black and white dithering
     float luminance = getLuminance(originalColor.rgb);
@@ -109,8 +114,8 @@ void main() {
     // Blend between original color and dithered black/white based on effect intensity
     vec3 finalColor = mix(originalColor.rgb, ditheredColor, effectIntensity);
     
-    // Add subtle glow effect near mouse
-    float glow = haloInfluence * uHover * 0.1;
+    // Add stronger glow effect near mouse
+    float glow = haloInfluence * uHover * 0.3;
     finalColor += vec3(glow);
     
     gl_FragColor = vec4(finalColor, originalColor.a);
@@ -175,14 +180,14 @@ export const DitheredImage: React.FC<DitheredImageProps> = ({
     if (isHovering) {
       gsap.to(hoverRef, {
         current: 1,
-        duration: 1,
-        ease: 'power3.inOut',
+        duration: 0.3,
+        ease: 'power2.out',
       });
     } else {
       gsap.to(hoverRef, {
         current: 0,
-        duration: 1,
-        ease: 'power3.inOut',
+        duration: 0.3,
+        ease: 'power2.out',
       });
     }
   }, [isHovering]);
