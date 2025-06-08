@@ -13,6 +13,7 @@ You can view examples of the effect locally my searching the folder .claude for 
 This is a Vite + React + TypeScript project that uses Bun as the runtime. The project aims to recreate a shader-based dithering hover effect similar to the one on stabondar.com.
 
 **Key Technologies:**
+
 - three.js (for WebGL/shaders)
 - gsap (for animations)
 - react-three-fiber (React bindings for Three.js)
@@ -21,7 +22,7 @@ This is a Vite + React + TypeScript project that uses Bun as the runtime. The pr
 
 - `bun install` - Install project dependencies
 - `bun add <package_name>` - Add new packages
-- `bun dev` - Start development server (user will run manually)
+- `bun dev` - Start development server (user will run manually) DO NOT EVER RUN THIS
 - `bun run build` - Build for production (runs TypeScript compilation + Vite build)
 - `bun run lint` - Run ESLint
 - `bun run preview` - Preview production build
@@ -29,11 +30,13 @@ This is a Vite + React + TypeScript project that uses Bun as the runtime. The pr
 ## Current State
 
 The base React app structure exists with:
+
 - Basic Vite + React + TypeScript setup
 - Single image display (divers.webp) in App.tsx
 - No Three.js or shader implementations yet
 
 **Required packages to add:**
+
 - @react-three/fiber
 - three
 - @types/three
